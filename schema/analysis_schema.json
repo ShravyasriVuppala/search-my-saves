@@ -1,0 +1,38 @@
+{
+  "$comment": "Single source of truth for the Gemini analysis output shape (plan.md D13, D8, §8.2). The pipeline worker converts this to a Gemini response_schema; the web app's TS types are hand-kept in sync with it. Changing a field here means updating both consumers.",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": ["Food", "Travel", "Fashion", "Home", "Products", "Learning", "Entertainment", "Ideas", "Other"]
+    },
+    "subcategory": { "type": "string" },
+    "title": {
+      "type": "string",
+      "description": "Human-readable, <=8 words. e.g. 'Mango Yogurt Dessert', not 'Recipe'."
+    },
+    "summary": {
+      "type": "string",
+      "description": "One-line concise summary."
+    },
+    "search_context": {
+      "type": "string",
+      "description": "THE primary retrieval signal. 2-4 sentences describing what a person would remember about this post later -- visible content (colors, ingredients, setting, garment type, room, place, on-screen text), not a caption restatement."
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "8-15 lowercase terms including synonyms and everyday phrasings not present in the caption."
+    },
+    "entities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Proper nouns actually visible/named -- brands, restaurants, cities, people, technologies. Empty if none. Never guessed."
+    },
+    "ai_metadata": {
+      "type": "object",
+      "description": "Category-specific fields, schema-less by design (CLAUDE.md principle 5). Only fields Gemini is genuinely confident about. Guidance per category: Food -> cuisine, dish_type, ingredients, meal_type, dietary_type, cooking_time. Travel -> country, city, destination, place_type, activity. Fashion -> clothing_type, color, style, occasion, brand. Home -> room, interior_style, furniture, colors, decor_items. Products -> product, brand, product_type, notable_features. Learning -> topic, concepts, technology, learning_type. Entertainment/Ideas/Other -> free-form."
+    }
+  },
+  "required": ["category", "title", "summary", "search_context", "keywords"]
+}

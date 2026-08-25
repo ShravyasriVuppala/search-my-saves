@@ -483,7 +483,7 @@ Next.js App Router + Tailwind, all data server-side (D5).
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0. Scaffold (pipeline pkg, web app, .gitignore, .env.example) | ☐ | |
+| 0. Scaffold (pipeline pkg, web app, .gitignore, .env.example) | ☑ | `pipeline/` venv verified — all 5 deps (google-genai, supabase, opencv-python-headless, pillow, python-dotenv) install and import clean on Python 3.14. `config.py`/`db.py`/`models.py` written and smoke-tested (fail-fast on missing env confirmed). `schema/analysis_schema.json` written as the D13 shared contract. `web/` Next.js 16 + TS + Tailwind scaffolded, starter boilerplate stripped, `npm run build` + lint verified clean. Branch: `phase-0-scaffold`. |
 | 1. Supabase schema + indexes + `hybrid_search` | ☑ | Written and **verified against pgvector/pg16 in Docker**: all 3 migrations apply cleanly and are idempotent; RRF fusion, FTS-only rescue, semantic-only rescue, stopword-only queries, category filter, stemming, weight skew, `updated_at` trigger, generated-column refresh, and cascade delete all confirmed. Still needs applying to the real Supabase project. |
 | 2. Ingestion (parse-export → scrape → ingest → fetch-media) | ☐ | export has 85 posts |
 | 3. AI worker | ☐ | COMPLETED/FAILED: — |
