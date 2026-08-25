@@ -9,6 +9,12 @@ dependencies = [
     "opencv-python-headless>=4.10.0",
     "pillow>=11.0.0",
     "python-dotenv>=1.0.1",
+    # google-genai depends on httpx internally, but gemini/client.py and
+    # worker.py import it directly now (to catch transient network errors
+    # the SDK itself doesn't retry by default -- see gemini/client.py's
+    # _TRANSIENT_NETWORK_ERRORS). Declared explicitly so this doesn't break
+    # if google-genai ever changes its own HTTP client.
+    "httpx>=0.27.0",
 ]
 
 [dependency-groups]

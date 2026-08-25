@@ -61,6 +61,16 @@ def analyze_post(
         ),
     )
 
+    if response.text is None:
+        # Happens when there are no candidates at all, most commonly a
+        # safety filter block -- rare for ordinary food/travel/fashion
+        # photos, but not impossible, and json.loads(None) would otherwise
+        # surface as an opaque TypeError instead of saying what happened.
+        finish_reason = None
+        if response.candidates:
+            finish_reason = response.candidates[0].finish_reason
+        raise RuntimeError(f"Gemini returned no content (finish_reason={finish_reason})")
+
     raw = json.loads(response.text)
 
     return AnalysisResult(

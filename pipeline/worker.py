@@ -11,12 +11,19 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from config import Settings, load_settings
 from db import get_client
 from gemini.analyze import analyze_post
 from gemini.client import RETRYABLE_STATUS_CODES
 from gemini.embed import embed_document
 from media import download_bytes, extract_video_frames
+
+# Same non-post-fault reasoning as 429/503 (plan.md §8.1) applies to a
+# network error that survived call_with_retry's own backoff -- a timeout or
+# dropped connection to Gemini isn't this post's fault either.
+_TRANSIENT_NETWORK_ERRORS = (httpx.TimeoutException, httpx.ConnectError)
 
 STUCK_PROCESSING_MINUTES = 30
 VIDEO_DOWNLOAD_TIMEOUT_S = 120
@@ -156,7 +163,9 @@ def process_post(client, settings: Settings, post: dict) -> None:
 
 
 def _is_quota_error(exc: Exception) -> bool:
-    return getattr(exc, "code", None) in RETRYABLE_STATUS_CODES
+    return getattr(exc, "code", None) in RETRYABLE_STATUS_CODES or isinstance(
+        exc, _TRANSIENT_NETWORK_ERRORS
+    )
 
 
 def mark_failed(client, post: dict, error: str, count_against_retry: bool) -> None:

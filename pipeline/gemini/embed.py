@@ -35,6 +35,8 @@ def _embed(settings: Settings, text: str, task_type: str) -> list[float]:
             output_dimensionality=settings.gemini_embedding_dim,
         ),
     )
+    if not response.embeddings or not response.embeddings[0].values:
+        raise RuntimeError("Gemini returned no embedding values for the input text.")
     return _normalize(response.embeddings[0].values)
 
 
