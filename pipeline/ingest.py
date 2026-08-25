@@ -21,12 +21,15 @@ MEDIA_TYPE_MAP = {"Image": "image", "Video": "video", "Sidecar": "carousel"}
 
 
 def _media_url(item: dict) -> str | None:
-    if item.get("displayUrl"):
-        return item["displayUrl"]
-    child_posts = item.get("childPosts") or []
-    if child_posts:
-        return child_posts[0].get("displayUrl")
-    return None
+    # Carousels specifically need childPosts[0] (plan.md §7.3) -- Apify may
+    # still populate a top-level displayUrl for a Sidecar item representing
+    # something other than the first slide, so that branch must be checked
+    # first for carousels, not used as a blanket default for every type.
+    if item.get("type") == "Sidecar":
+        child_posts = item.get("childPosts") or []
+        if child_posts and child_posts[0].get("displayUrl"):
+            return child_posts[0]["displayUrl"]
+    return item.get("displayUrl")
 
 
 def normalize(item: dict, ref: dict | None) -> dict:
@@ -52,6 +55,9 @@ def normalize(item: dict, ref: dict | None) -> dict:
     }
 
 
+UPSERT_BATCH_SIZE = 100
+
+
 def ingest(raw_items: list[dict], refs_by_shortcode: dict[str, dict]) -> tuple[int, int]:
     settings = load_settings()
     client = get_client(settings)
@@ -67,15 +73,23 @@ def ingest(raw_items: list[dict], refs_by_shortcode: dict[str, dict]) -> tuple[i
     if not rows:
         return 0, 0
 
-    # ON CONFLICT DO NOTHING under the hood -- RETURNING only reports rows
-    # that were actually inserted, so len(result.data) is the true insert
-    # count, not the request size.
-    result = (
-        client.table("saved_posts")
-        .upsert(rows, on_conflict="instagram_post_id", ignore_duplicates=True)
-        .execute()
-    )
-    inserted = len(result.data or [])
+    # Chunked: each row carries the full raw_apify_data JSONB blob, so a
+    # single large backfill scrape (a few hundred posts, each several KB)
+    # could otherwise build one multi-MB request and risk a payload-size
+    # limit on Supabase's API gateway.
+    inserted = 0
+    for i in range(0, len(rows), UPSERT_BATCH_SIZE):
+        batch = rows[i : i + UPSERT_BATCH_SIZE]
+        # ON CONFLICT DO NOTHING under the hood -- RETURNING only reports
+        # rows that were actually inserted, so len(result.data) is the true
+        # insert count for this batch, not the batch size.
+        result = (
+            client.table("saved_posts")
+            .upsert(batch, on_conflict="instagram_post_id", ignore_duplicates=True)
+            .execute()
+        )
+        inserted += len(result.data or [])
+
     skipped = len(rows) - inserted
     return inserted, skipped
 

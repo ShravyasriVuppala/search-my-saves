@@ -118,6 +118,34 @@ def extract_video_frames(
         tmp_path.unlink(missing_ok=True)
 
 
+_FETCH_PAGE_SIZE = 1000
+
+
+def _fetch_posts_missing_thumbnails(client) -> list[dict]:
+    """Paginates via .range() -- PostgREST caps rows per request, and a
+    fresh ingest of a large library can plausibly leave more posts missing
+    a thumbnail than fits in one page. Without this, a single unpaginated
+    select would silently process only the first ~1000 with no indication
+    the rest were skipped."""
+    posts: list[dict] = []
+    offset = 0
+    while True:
+        page = (
+            client.table("saved_posts")
+            .select("id, instagram_post_id, media_url")
+            .is_("media_storage_path", "null")
+            .range(offset, offset + _FETCH_PAGE_SIZE - 1)
+            .execute()
+            .data
+            or []
+        )
+        posts.extend(page)
+        if len(page) < _FETCH_PAGE_SIZE:
+            break
+        offset += _FETCH_PAGE_SIZE
+    return posts
+
+
 def fetch_all_pending_thumbnails() -> None:
     """Standalone entry point: fetch a thumbnail for every saved_posts row
     that doesn't have one yet. Safe to re-run -- only touches rows where
@@ -125,14 +153,7 @@ def fetch_all_pending_thumbnails() -> None:
     settings = load_settings()
     client = get_client(settings)
 
-    posts = (
-        client.table("saved_posts")
-        .select("id, instagram_post_id, media_url")
-        .is_("media_storage_path", "null")
-        .execute()
-        .data
-        or []
-    )
+    posts = _fetch_posts_missing_thumbnails(client)
     print(f"{len(posts)} posts missing a thumbnail", file=sys.stderr)
 
     fetched = 0
