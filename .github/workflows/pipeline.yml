@@ -48,4 +48,11 @@ jobs:
           SUPABASE_STORAGE_BUCKET: thumbnails
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: python cli.py "${{ inputs.command }}"
+          # Passed via env, not interpolated directly into the run: script --
+          # ${{ }} is a raw text substitution done before the shell ever
+          # sees it, which is GitHub's own documented anti-pattern for
+          # workflow_dispatch inputs. type: choice constrains the normal UI
+          # dropdown, but isn't a substitute for not building a shell
+          # command out of unescaped input in the first place.
+          COMMAND: ${{ inputs.command }}
+        run: python cli.py "$COMMAND"
