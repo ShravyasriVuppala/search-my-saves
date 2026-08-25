@@ -44,8 +44,11 @@ def evaluate(queries: list[dict], k_values: tuple[int, ...] = DEFAULT_K_VALUES) 
         try:
             query_text = entry["query"]
             expected = entry["expect_shortcode"]
-        except KeyError as exc:
-            print(f"warning: skipping malformed entry (missing {exc}): {entry}", file=sys.stderr)
+        except (KeyError, TypeError) as exc:
+            # TypeError covers a hand-edit mistake like a bare string
+            # sitting in the array instead of a {"query": ..., ...} object
+            # -- entry["query"] on a str raises TypeError, not KeyError.
+            print(f"warning: skipping malformed entry ({exc}): {entry}", file=sys.stderr)
             continue
         scored += 1
 

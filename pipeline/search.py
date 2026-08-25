@@ -9,6 +9,7 @@ import sys
 from config import Settings, load_settings
 from db import get_client
 from gemini.embed import embed_query
+from models import VALID_CATEGORIES
 
 
 def search(
@@ -57,6 +58,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("-n", "--limit", type=int, default=10)
     parser.add_argument("--category", default=None)
     args = parser.parse_args(argv)
+
+    if args.category and args.category not in VALID_CATEGORIES:
+        # Otherwise a typo (e.g. "food" vs "Food") silently returns "no
+        # results" instead of the actual matches -- same trap reprocess.py's
+        # --category had, fixed there for the same reason.
+        print(
+            f"error: {args.category!r} is not a known category. "
+            f"Valid: {', '.join(sorted(VALID_CATEGORIES))}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     print_results(args.query, limit=args.limit, category=args.category)
 
 

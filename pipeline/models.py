@@ -6,6 +6,21 @@ PostRef, ingest consumes it into SavedPost, the worker produces AnalysisResult.
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# Mirrors the category enum in schema/analysis_schema.json / CLAUDE.md.
+# Single source of truth so search.py and reprocess.py validate against the
+# same list rather than each keeping their own copy to drift out of sync.
+VALID_CATEGORIES = {
+    "Food",
+    "Travel",
+    "Fashion",
+    "Home",
+    "Products",
+    "Learning",
+    "Entertainment",
+    "Ideas",
+    "Other",
+}
+
 
 @dataclass(frozen=True)
 class PostRef:
