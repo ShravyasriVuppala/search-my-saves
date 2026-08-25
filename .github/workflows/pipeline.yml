@@ -1,0 +1,51 @@
+name: Run pipeline
+
+# Deliberately scoped to fetch-media and process only -- parse-export/
+# scrape/ingest need the local Instagram export and Apify raw JSON, which
+# aren't (and shouldn't be) checked into git, and scrape spends real Apify
+# credit behind a --confirm gate that's meant to be seen, not run
+# unattended. Those stay a local/manual step; this workflow is for the
+# parts that only need what's already in Supabase.
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Which pipeline step to run"
+        required: true
+        type: choice
+        options:
+          - fetch-media
+          - process
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # WORKER_DAILY_CAP=400 at WORKER_RPM=10 is ~40 minutes worst case, plus
+    # video downloads/frame extraction -- this bounds a stuck run so it
+    # can't quietly burn through the whole 2,000 min/mo Actions budget
+    # (plan.md §4).
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run ${{ inputs.command }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_STORAGE_BUCKET: thumbnails
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: python cli.py "${{ inputs.command }}"
