@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { envOr } from "@/lib/env";
 import { getSupabaseClient } from "@/lib/supabase";
 
 // Short-lived: this route sits behind the app's auth middleware, but the
@@ -25,10 +26,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid path." }, { status: 400 });
   }
 
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET;
-  if (!bucket) {
-    return NextResponse.json({ error: "Server misconfigured." }, { status: 500 });
-  }
+  // Matches pipeline/config.py's default -- if SUPABASE_STORAGE_BUCKET is
+  // left unset in .env, the pipeline uploads to "thumbnails" and this route
+  // must resolve to the same bucket, not 500 on every image.
+  const bucket = envOr("SUPABASE_STORAGE_BUCKET", "thumbnails");
 
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.storage

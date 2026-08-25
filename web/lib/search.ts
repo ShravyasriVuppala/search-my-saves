@@ -1,6 +1,7 @@
 import "server-only";
 import { GoogleGenAI } from "@google/genai";
 
+import { envIntOr, envOr } from "@/lib/env";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Category, SearchResult } from "@/lib/types";
 
@@ -19,8 +20,8 @@ function requireEnv(name: string): string {
  */
 async function embedQuery(query: string): Promise<number[]> {
   const apiKey = requireEnv("GEMINI_API_KEY");
-  const model = process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001";
-  const outputDimensionality = Number(process.env.GEMINI_EMBEDDING_DIM ?? "768");
+  const model = envOr("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001");
+  const outputDimensionality = envIntOr("GEMINI_EMBEDDING_DIM", 768);
 
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.embedContent({

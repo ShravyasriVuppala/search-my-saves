@@ -8,7 +8,18 @@ async function getStats(): Promise<LibraryStats> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("library_stats").select("*").single();
   if (error) throw new Error(`Failed to load stats: ${error.message}`);
-  return data as LibraryStats;
+
+  // library_stats' columns are count(*) (Postgres bigint); coerce explicitly
+  // rather than assuming PostgREST serializes them as JSON numbers -- a
+  // string "1" would make `stats.failed === 1` silently fail below.
+  const row = data as Record<string, unknown>;
+  return {
+    total: Number(row.total),
+    completed: Number(row.completed),
+    processing: Number(row.processing),
+    pending: Number(row.pending),
+    failed: Number(row.failed),
+  };
 }
 
 export default async function DashboardPage() {

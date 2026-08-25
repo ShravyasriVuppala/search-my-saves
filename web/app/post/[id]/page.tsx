@@ -29,7 +29,15 @@ interface PostDetail {
   } | null;
 }
 
+// saved_posts.id is a uuid column -- a non-UUID string (a typo'd or
+// hand-edited URL, a stale bookmark) would otherwise reach Postgres as an
+// equality filter it can't type-cast, surfacing as an unhandled error
+// (Next.js's generic error page) instead of a clean 404.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function getPost(id: string): Promise<PostDetail | null> {
+  if (!UUID_RE.test(id)) return null;
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("saved_posts")

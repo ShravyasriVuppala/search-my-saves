@@ -73,10 +73,17 @@ export async function verifySessionToken(
   if (parts.length !== 2) return false;
   const [payload, sig] = parts;
 
-  const expectedSig = await hmacSha256(secret, payload);
-  if (!constantTimeEqual(base64UrlDecode(sig), expectedSig)) return false;
-
+  // Everything below parses untrusted cookie content -- base64UrlDecode's
+  // atob() throws DOMException on malformed input, which a corrupted or
+  // tampered cookie value can trivially trigger. Without this try/catch
+  // wrapping the whole thing (not just the JSON.parse), that throw would
+  // propagate out of this function as an unhandled rejection; middleware.ts
+  // awaits this directly with no catch of its own, so a bad cookie would
+  // 500 the request instead of failing safely to "not authenticated".
   try {
+    const expectedSig = await hmacSha256(secret, payload);
+    if (!constantTimeEqual(base64UrlDecode(sig), expectedSig)) return false;
+
     const { exp } = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload))) as {
       exp: number;
     };
