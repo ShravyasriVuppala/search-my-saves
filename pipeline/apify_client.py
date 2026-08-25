@@ -102,8 +102,8 @@ def scrape(urls: list[str], token: str) -> list[dict]:
     return all_items
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="cli.py scrape", description=__doc__)
     parser.add_argument(
         "--refs",
         default=DEFAULT_REFS,
@@ -115,7 +115,7 @@ def main() -> None:
         action="store_true",
         help="required -- actually spend Apify credit and run the scrape",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.refs.exists():
         print(f"error: {args.refs} does not exist -- run export_parser.py first", file=sys.stderr)

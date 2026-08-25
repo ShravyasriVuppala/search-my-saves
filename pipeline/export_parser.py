@@ -138,8 +138,8 @@ def _to_json(ref: PostRef) -> dict:
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="cli.py parse-export", description=__doc__)
     parser.add_argument(
         "input",
         nargs="?",
@@ -154,7 +154,7 @@ def main() -> None:
         type=Path,
         help=f"where to write the normalized PostRef list (default: {DEFAULT_OUTPUT})",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.input.exists():
         print(f"error: {args.input} does not exist", file=sys.stderr)

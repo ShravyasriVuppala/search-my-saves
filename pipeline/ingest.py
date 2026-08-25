@@ -94,8 +94,8 @@ def ingest(raw_items: list[dict], refs_by_shortcode: dict[str, dict]) -> tuple[i
     return inserted, skipped
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="cli.py ingest", description=__doc__)
     parser.add_argument("raw", type=Path, help="path to an apify-raw-<ts>.json file from apify_client.py")
     parser.add_argument(
         "--refs",
@@ -103,7 +103,7 @@ def main() -> None:
         type=Path,
         help=f"post_refs.json from export_parser.py, for saved_at/export_caption (default: {DEFAULT_REFS})",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.raw.exists():
         print(f"error: {args.raw} does not exist", file=sys.stderr)
