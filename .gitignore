@@ -1,0 +1,38 @@
+# secrets — never commit real values, .env.example is the template
+.env
+.env.local
+.env.*.local
+pipeline/.env
+web/.env
+web/.env.local
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# node / next.js
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+*.tsbuildinfo
+
+# ingestion artifacts — Apify raw dumps, Meta export, downloaded media.
+# These are large, personal, and reproducible from Apify re-runs; keep them
+# local only. raw_apify_data is preserved durably in Postgres instead.
+data/
+
+# scratch frame extraction (plan.md §8.5 — never persisted, but just in case
+# a run is interrupted mid-extraction)
+pipeline/*.mp4
+pipeline/frame_*.jpg
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store
