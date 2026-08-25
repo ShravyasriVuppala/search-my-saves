@@ -32,6 +32,10 @@ data/
 pipeline/*.mp4
 pipeline/frame_*.jpg
 
+# local planning docs — not versioned in the repo
+CLAUDE.md
+plan.md
+
 # editor / OS
 .idea/
 .vscode/
