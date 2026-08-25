@@ -25,7 +25,18 @@ def _require(name: str) -> str:
 
 
 def _optional(name: str, default: str) -> str:
-    return os.environ.get(name, default)
+    # os.environ.get(name, default) only falls back when the key is absent --
+    # a present-but-blank .env line (e.g. `SUPABASE_STORAGE_BUCKET=`) would
+    # silently win as "", which is never what's intended for a default.
+    return os.environ.get(name) or default
+
+
+def _optional_int(name: str, default: str) -> int:
+    raw = os.environ.get(name) or default
+    try:
+        return int(raw)
+    except ValueError:
+        raise ConfigError(f"{name}={raw!r} is not a valid integer.") from None
 
 
 @dataclass(frozen=True)
@@ -66,13 +77,13 @@ def load_settings() -> Settings:
             "GEMINI_ANALYSIS_FALLBACK_MODEL", "gemini-2.5-flash"
         ),
         gemini_embedding_model=_optional("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
-        gemini_embedding_dim=int(_optional("GEMINI_EMBEDDING_DIM", "768")),
+        gemini_embedding_dim=_optional_int("GEMINI_EMBEDDING_DIM", "768"),
         apify_token=_require("APIFY_TOKEN"),
-        worker_rpm=int(_optional("WORKER_RPM", "10")),
-        worker_daily_cap=int(_optional("WORKER_DAILY_CAP", "400")),
-        worker_max_retries=int(_optional("WORKER_MAX_RETRIES", "3")),
-        media_max_frames=int(_optional("MEDIA_MAX_FRAMES", "12")),
-        media_frame_width=int(_optional("MEDIA_FRAME_WIDTH", "480")),
-        media_frame_height=int(_optional("MEDIA_FRAME_HEIGHT", "854")),
-        video_max_mb=int(_optional("VIDEO_MAX_MB", "25")),
+        worker_rpm=_optional_int("WORKER_RPM", "10"),
+        worker_daily_cap=_optional_int("WORKER_DAILY_CAP", "400"),
+        worker_max_retries=_optional_int("WORKER_MAX_RETRIES", "3"),
+        media_max_frames=_optional_int("MEDIA_MAX_FRAMES", "12"),
+        media_frame_width=_optional_int("MEDIA_FRAME_WIDTH", "480"),
+        media_frame_height=_optional_int("MEDIA_FRAME_HEIGHT", "854"),
+        video_max_mb=_optional_int("VIDEO_MAX_MB", "25"),
     )
