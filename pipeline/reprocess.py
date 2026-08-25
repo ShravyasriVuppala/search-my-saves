@@ -11,22 +11,10 @@ import sys
 
 from config import load_settings
 from db import get_client
+from models import VALID_CATEGORIES
 
 FETCH_PAGE_SIZE = 1000
 REQUEUE_BATCH_SIZE = 200
-
-# Mirrors the category enum in schema/analysis_schema.json / CLAUDE.md.
-VALID_CATEGORIES = {
-    "Food",
-    "Travel",
-    "Fashion",
-    "Home",
-    "Products",
-    "Learning",
-    "Entertainment",
-    "Ideas",
-    "Other",
-}
 
 
 def _fetch_all(query_builder_factory) -> list[dict]:

@@ -6,6 +6,11 @@ interface RetryRequestBody {
   postId?: string;
 }
 
+// saved_posts.id is a uuid column -- validating here gives a clear 400
+// instead of the request falling through to Postgres's own type-cast
+// error, which the code below still handles (as a 500), just less clearly.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: NextRequest) {
   let body: RetryRequestBody;
   try {
@@ -15,8 +20,8 @@ export async function POST(request: NextRequest) {
   }
 
   const postId = body.postId;
-  if (!postId || typeof postId !== "string") {
-    return NextResponse.json({ error: "postId is required." }, { status: 400 });
+  if (!postId || typeof postId !== "string" || !UUID_RE.test(postId)) {
+    return NextResponse.json({ error: "postId is required and must be a valid UUID." }, { status: 400 });
   }
 
   const supabase = getSupabaseClient();

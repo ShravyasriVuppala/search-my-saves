@@ -13,22 +13,30 @@ interface FailedPost {
   updated_at: string;
 }
 
-async function getFailedPosts(): Promise<FailedPost[]> {
+// Well above any realistic failure count for a personal library in normal
+// operation -- a bound so this page can't silently truncate an unbounded
+// list (the same class of bug found and fixed in media.py/reprocess.py's
+// unpaginated selects), not a real pagination UI.
+const MAX_FAILED_SHOWN = 500;
+
+async function getFailedPosts(): Promise<{ posts: FailedPost[]; total: number }> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("saved_posts")
     .select(
       "id, instagram_post_id, instagram_url, creator_username, processing_error, retry_count, updated_at",
+      { count: "exact" },
     )
     .eq("processing_status", "FAILED")
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .limit(MAX_FAILED_SHOWN);
 
   if (error) throw new Error(`Failed to load failed posts: ${error.message}`);
-  return data ?? [];
+  return { posts: data ?? [], total: count ?? (data ?? []).length };
 }
 
 export default async function StatusPage() {
-  const posts = await getFailedPosts();
+  const { posts, total } = await getFailedPosts();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
@@ -38,6 +46,13 @@ export default async function StatusPage() {
           ← search
         </Link>
       </div>
+
+      {total > posts.length && (
+        <p className="mb-4 text-sm text-amber-600">
+          Showing {posts.length} of {total} failed posts -- something is likely wrong with
+          processing itself, worth investigating before retrying individually.
+        </p>
+      )}
 
       {posts.length === 0 ? (
         <p className="text-zinc-500">Nothing failed.</p>
