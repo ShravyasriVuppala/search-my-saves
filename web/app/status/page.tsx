@@ -3,6 +3,9 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { RetryButton } from "./retry-button";
 
+// Live processing status, not a build-time snapshot -- must render per request.
+export const dynamic = "force-dynamic";
+
 interface FailedPost {
   id: string;
   instagram_post_id: string;

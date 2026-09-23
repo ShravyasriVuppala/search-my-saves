@@ -3,6 +3,9 @@ import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { CATEGORIES, type Category } from "@/lib/types";
 
+// Live library contents, not a build-time snapshot -- must render per request.
+export const dynamic = "force-dynamic";
+
 const PAGE_SIZE = 48;
 
 interface LibraryRow {

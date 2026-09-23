@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Category } from "@/lib/types";
 
+// Live post data, not a build-time snapshot -- must render per request.
+export const dynamic = "force-dynamic";
+
 interface PostDetail {
   id: string;
   instagram_url: string;

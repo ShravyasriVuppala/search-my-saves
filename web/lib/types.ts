@@ -7,14 +7,19 @@
 export type ProcessingStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export type Category =
+  | "Movies"
+  | "Fashion"
+  | "Beauty"
+  | "Hairstyles"
   | "Food"
   | "Travel"
-  | "Fashion"
-  | "Home"
-  | "Products"
-  | "Learning"
-  | "Entertainment"
-  | "Ideas"
+  | "Photo poses"
+  | "Tech"
+  | "Fitness"
+  | "Dance"
+  | "Art"
+  | "Editing"
+  | "Kids"
   | "Other";
 
 export type MediaType = "image" | "video" | "carousel";
@@ -91,14 +96,25 @@ export interface LibraryStats {
   failed: number;
 }
 
+/** Row shape of the category_counts view. */
+export interface CategoryCount {
+  category: Category;
+  count: number;
+}
+
 export const CATEGORIES: Category[] = [
+  "Movies",
+  "Fashion",
+  "Beauty",
+  "Hairstyles",
   "Food",
   "Travel",
-  "Fashion",
-  "Home",
-  "Products",
-  "Learning",
-  "Entertainment",
-  "Ideas",
+  "Photo poses",
+  "Tech",
+  "Fitness",
+  "Dance",
+  "Art",
+  "Editing",
+  "Kids",
   "Other",
 ];
