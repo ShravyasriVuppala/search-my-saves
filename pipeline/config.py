@@ -58,6 +58,7 @@ class Settings:
 
     # Worker / media
     worker_rpm: int
+    worker_concurrency: int
     worker_daily_cap: int
     worker_max_retries: int
     media_max_frames: int
@@ -80,6 +81,7 @@ def load_settings() -> Settings:
         gemini_embedding_dim=_optional_int("GEMINI_EMBEDDING_DIM", "768"),
         apify_token=_require("APIFY_TOKEN"),
         worker_rpm=_optional_int("WORKER_RPM", "10"),
+        worker_concurrency=_optional_int("WORKER_CONCURRENCY", "5"),
         worker_daily_cap=_optional_int("WORKER_DAILY_CAP", "400"),
         worker_max_retries=_optional_int("WORKER_MAX_RETRIES", "3"),
         media_max_frames=_optional_int("MEDIA_MAX_FRAMES", "12"),
