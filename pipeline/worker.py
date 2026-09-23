@@ -8,6 +8,7 @@ post's retry_count -- that's a quota problem, not the post's fault
 """
 
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -27,6 +28,11 @@ _TRANSIENT_NETWORK_ERRORS = (httpx.TimeoutException, httpx.ConnectError)
 
 STUCK_PROCESSING_MINUTES = 30
 VIDEO_DOWNLOAD_TIMEOUT_S = 120
+CONSECUTIVE_QUOTA_ERROR_LIMIT = 3
+# Claim race handling: pull a few candidates so N threads racing for work
+# usually each win a different row on the first pass instead of serializing.
+CLAIM_CANDIDATE_POOL = 10
+CLAIM_RACE_ATTEMPTS = 3
 
 
 def reclaim_stuck_posts(client) -> int:
@@ -43,28 +49,46 @@ def reclaim_stuck_posts(client) -> int:
 
 def claim_one(client, settings: Settings) -> dict | None:
     """Claims a single post, not a batch -- so a post is never marked
-    PROCESSING without being processed next in the same loop iteration.
-    Slightly more Supabase round-trips than batch-claiming, negligible next
-    to the WORKER_RPM gap between Gemini calls, and it removes the "claimed
-    but never attempted" state entirely instead of needing to recover from
-    it (previously handled by releasing unprocessed batch members on a
-    quota stop, and before that by the 30-minute stuck-PROCESSING reclaim)."""
-    posts = (
-        client.table("saved_posts")
-        .select("*")
-        .eq("processing_status", "PENDING")
-        .lt("retry_count", settings.worker_max_retries)
-        .order("saved_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    if not posts:
-        return None
-    post = posts[0]
-    client.table("saved_posts").update({"processing_status": "PROCESSING"}).eq("id", post["id"]).execute()
-    return post
+    PROCESSING without being processed next by the same caller. Removes the
+    "claimed but never attempted" state entirely instead of needing to
+    recover from it (previously handled by releasing unprocessed batch
+    members on a quota stop, and before that by the 30-minute
+    stuck-PROCESSING reclaim).
+
+    The claim is a compare-and-swap, not a plain update: the PENDING filter
+    is repeated on the UPDATE so that when several worker threads race for
+    the same row, exactly one of them gets a non-empty result back and the
+    losers retry against the next candidate. A plain
+    `.update().eq("id", ...)` would let every racing thread believe it had
+    claimed the same post and process it N times."""
+    for _ in range(CLAIM_RACE_ATTEMPTS):
+        candidates = (
+            client.table("saved_posts")
+            .select("id")
+            .eq("processing_status", "PENDING")
+            .lt("retry_count", settings.worker_max_retries)
+            .order("saved_at", desc=True)
+            .limit(CLAIM_CANDIDATE_POOL)
+            .execute()
+            .data
+            or []
+        )
+        if not candidates:
+            return None
+
+        for candidate in candidates:
+            claimed = (
+                client.table("saved_posts")
+                .update({"processing_status": "PROCESSING"})
+                .eq("id", candidate["id"])
+                .eq("processing_status", "PENDING")
+                .execute()
+                .data
+                or []
+            )
+            if claimed:
+                return claimed[0]
+    return None
 
 
 def resolve_media(client, settings: Settings, post: dict) -> tuple[list[bytes] | None, bytes | None]:
@@ -190,61 +214,107 @@ def mark_failed(client, post: dict, error: str, count_against_retry: bool) -> No
     client.table("saved_posts").update(update).eq("id", post["id"]).execute()
 
 
+class _Pacer:
+    """Shared across worker threads so combined dispatch rate still honours
+    WORKER_RPM. Without this, N threads would each pace themselves and the
+    real rate would be N x the configured limit."""
+
+    def __init__(self, min_interval_s: float) -> None:
+        self._min_interval_s = min_interval_s
+        self._lock = threading.Lock()
+        self._next_slot = 0.0
+
+    def wait_for_slot(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._min_interval_s
+        delay = slot - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+
+
 def run(daily_cap: int | None = None) -> None:
     settings = load_settings()
-    client = get_client(settings)
 
-    reclaimed = reclaim_stuck_posts(client)
+    reclaimed = reclaim_stuck_posts(get_client(settings))
     if reclaimed:
         print(f"reclaimed {reclaimed} posts stuck in PROCESSING", file=sys.stderr)
 
     cap = daily_cap if daily_cap is not None else settings.worker_daily_cap
-    min_interval_s = 60.0 / settings.worker_rpm
+    concurrency = max(1, settings.worker_concurrency)
+    pacer = _Pacer(60.0 / settings.worker_rpm)
 
-    processed = 0
-    completed = 0
-    failed = 0
-    stopped_early = False
+    state_lock = threading.Lock()
+    state = {"processed": 0, "completed": 0, "failed": 0, "consecutive_quota_errors": 0}
+    stop = threading.Event()
 
-    while processed < cap and not stopped_early:
-        post = claim_one(client, settings)
-        if post is None:
-            break
+    def worker_loop() -> None:
+        # Each thread gets its own Supabase client -- supabase-py wraps an
+        # httpx session that isn't documented as thread-safe, and sharing
+        # one across threads is the kind of bug that shows up as rare,
+        # unreproducible request corruption rather than a clean failure.
+        client = get_client(settings)
 
-        start = time.monotonic()
+        while not stop.is_set():
+            with state_lock:
+                if state["processed"] >= cap:
+                    return
 
-        try:
-            process_post(client, settings, post)
-            completed += 1
-        except Exception as exc:  # noqa: BLE001 -- one bad post must not kill the run
-            quota_error = _is_quota_error(exc)
-            mark_failed(client, post, str(exc), count_against_retry=not quota_error)
-            failed += 1
-            print(
-                f"{'quota-limited' if quota_error else 'failed'}: "
-                f"{post['instagram_post_id']}: {exc}",
-                file=sys.stderr,
-            )
-            if quota_error:
-                # 429/5xx surviving call_with_retry's own backoff means
-                # Gemini is globally limited right now, not just for this
-                # post -- every remaining post would fail the same way.
-                # Stop instead of burning through the rest one by one;
-                # nothing beyond this post has been claimed yet, so
-                # everything else is still untouched PENDING.
-                stopped_early = True
+            post = claim_one(client, settings)
+            if post is None:
+                return
 
-        processed += 1
-        elapsed_s = time.monotonic() - start
-        if elapsed_s < min_interval_s:
-            time.sleep(min_interval_s - elapsed_s)
+            pacer.wait_for_slot()
 
-    if stopped_early:
+            try:
+                process_post(client, settings, post)
+                with state_lock:
+                    state["completed"] += 1
+                    state["consecutive_quota_errors"] = 0
+            except Exception as exc:  # noqa: BLE001 -- one bad post must not kill the run
+                quota_error = _is_quota_error(exc)
+                mark_failed(client, post, str(exc), count_against_retry=not quota_error)
+                print(
+                    f"{'quota-limited' if quota_error else 'failed'}: "
+                    f"{post['instagram_post_id']}: {exc}",
+                    file=sys.stderr,
+                )
+                with state_lock:
+                    state["failed"] += 1
+                    if quota_error:
+                        # A single 429/5xx surviving call_with_retry's own
+                        # backoff doesn't mean Gemini is down for every post
+                        # -- observed in practice, capacity is spotty
+                        # (several succeed, then one fails) rather than out.
+                        # Only bail after several in a row, which is a much
+                        # stronger signal of a real, sustained outage.
+                        state["consecutive_quota_errors"] += 1
+                        if state["consecutive_quota_errors"] >= CONSECUTIVE_QUOTA_ERROR_LIMIT:
+                            stop.set()
+                    else:
+                        state["consecutive_quota_errors"] = 0
+            finally:
+                with state_lock:
+                    state["processed"] += 1
+
+    threads = [threading.Thread(target=worker_loop, daemon=True) for _ in range(concurrency)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    if stop.is_set():
         print(
-            "stopping early: Gemini appears quota/capacity limited -- re-run later to pick up the rest",
+            f"stopping early: {CONSECUTIVE_QUOTA_ERROR_LIMIT} consecutive quota/capacity "
+            "errors -- re-run later to pick up the rest",
             file=sys.stderr,
         )
-    print(f"processed {processed} ({completed} completed, {failed} failed)", file=sys.stderr)
+    print(
+        f"processed {state['processed']} "
+        f"({state['completed']} completed, {state['failed']} failed)",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":
