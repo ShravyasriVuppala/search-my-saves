@@ -33,6 +33,7 @@ CONSECUTIVE_QUOTA_ERROR_LIMIT = 3
 # usually each win a different row on the first pass instead of serializing.
 CLAIM_CANDIDATE_POOL = 10
 CLAIM_RACE_ATTEMPTS = 3
+CLAIM_ERROR_PAUSE_S = 5
 
 
 def reclaim_stuck_posts(client) -> int:
@@ -217,7 +218,12 @@ def mark_failed(client, post: dict, error: str, count_against_retry: bool) -> No
 class _Pacer:
     """Shared across worker threads so combined dispatch rate still honours
     WORKER_RPM. Without this, N threads would each pace themselves and the
-    real rate would be N x the configured limit."""
+    real rate would be N x the configured limit.
+
+    Paces *posts*, not raw API calls: each post makes one analysis call plus
+    one embedding call, and those hit two different models with separate
+    quotas, so WORKER_RPM should be read as posts-per-minute rather than
+    Gemini-requests-per-minute."""
 
     def __init__(self, min_interval_s: float) -> None:
         self._min_interval_s = min_interval_s
@@ -257,13 +263,35 @@ def run(daily_cap: int | None = None) -> None:
         client = get_client(settings)
 
         while not stop.is_set():
+            # Reserve the cap slot *before* claiming. Checking and then
+            # incrementing after the work would let all N threads pass the
+            # check before any of them increments, overshooting the cap by
+            # up to N-1 posts -- and the cap exists to bound daily API
+            # spend, so it needs to hold exactly.
             with state_lock:
                 if state["processed"] >= cap:
                     return
+                state["processed"] += 1
 
-            post = claim_one(client, settings)
+            post = None
+            claim_failed = False
+            try:
+                post = claim_one(client, settings)
+            except Exception as exc:  # noqa: BLE001 -- see below
+                # A transient Supabase error while claiming must not kill
+                # this thread for the rest of the run: with several threads
+                # that would silently shrink the pool one blip at a time
+                # until the run ends early looking like "no work left".
+                claim_failed = True
+                print(f"claim failed: {exc}", file=sys.stderr)
+
             if post is None:
-                return
+                with state_lock:
+                    state["processed"] -= 1  # slot went unused
+                if claim_failed and not stop.is_set():
+                    time.sleep(CLAIM_ERROR_PAUSE_S)
+                    continue
+                return  # genuinely nothing left to claim
 
             pacer.wait_for_slot()
 
@@ -294,9 +322,6 @@ def run(daily_cap: int | None = None) -> None:
                             stop.set()
                     else:
                         state["consecutive_quota_errors"] = 0
-            finally:
-                with state_lock:
-                    state["processed"] += 1
 
     threads = [threading.Thread(target=worker_loop, daemon=True) for _ in range(concurrency)]
     for thread in threads:
