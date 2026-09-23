@@ -16,6 +16,15 @@ from gemini.prompt import (
 from models import AnalysisResult
 
 
+class EmptyResponseError(RuntimeError):
+    """Gemini returned no candidates at all, most often a safety filter
+    block. Distinct from other failures because it is frequently caused by
+    the attached media rather than the post itself, which makes retrying
+    without media (caption-only) a worthwhile recovery -- see worker.py's
+    process_post. A dedicated type keeps that caller from having to
+    string-match an error message."""
+
+
 def _parse_ai_metadata(raw_value: str | None) -> dict:
     """ai_metadata comes back as a JSON-encoded string, not a nested object
     (see the comment on GEMINI_RESPONSE_SCHEMA for why). A malformed or
@@ -75,7 +84,7 @@ def analyze_post(
         finish_reason = None
         if response.candidates:
             finish_reason = response.candidates[0].finish_reason
-        raise RuntimeError(f"Gemini returned no content (finish_reason={finish_reason})")
+        raise EmptyResponseError(f"Gemini returned no content (finish_reason={finish_reason})")
 
     raw = json.loads(response.text)
 
@@ -131,7 +140,7 @@ def recategorize_post(
         finish_reason = None
         if response.candidates:
             finish_reason = response.candidates[0].finish_reason
-        raise RuntimeError(f"Gemini returned no content (finish_reason={finish_reason})")
+        raise EmptyResponseError(f"Gemini returned no content (finish_reason={finish_reason})")
 
     raw = json.loads(response.text)
     return {
