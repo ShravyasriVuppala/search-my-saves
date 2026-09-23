@@ -4,7 +4,7 @@
   "properties": {
     "category": {
       "type": "string",
-      "enum": ["Food", "Travel", "Fashion", "Home", "Products", "Learning", "Entertainment", "Ideas", "Other"]
+      "enum": ["Movies", "Fashion", "Beauty", "Hairstyles", "Food", "Travel", "Photo poses", "Tech", "Fitness", "Dance", "Art", "Editing", "Kids", "Other"]
     },
     "subcategory": { "type": "string" },
     "title": {
@@ -31,7 +31,7 @@
     },
     "ai_metadata": {
       "type": "object",
-      "description": "Category-specific fields, schema-less by design (CLAUDE.md principle 5). Only fields Gemini is genuinely confident about. Guidance per category: Food -> cuisine, dish_type, ingredients, meal_type, dietary_type, cooking_time. Travel -> country, city, destination, place_type, activity. Fashion -> clothing_type, color, style, occasion, brand. Home -> room, interior_style, furniture, colors, decor_items. Products -> product, brand, product_type, notable_features. Learning -> topic, concepts, technology, learning_type. Entertainment/Ideas/Other -> free-form."
+      "description": "Category-specific fields, schema-less by design (CLAUDE.md principle 5). Only fields Gemini is genuinely confident about. Guidance per category: Movies -> title, genre, actors, streaming_platform. Fashion -> clothing_type, color, style, occasion, brand. Beauty -> product_type, brand, skin_concern, technique. Hairstyles -> hairstyle_type, hair_length, technique, tools_used. Food -> cuisine, dish_type, ingredients, meal_type, cooking_time. Travel -> country, city, destination, place_type, activity. Photo poses -> pose_type, setting, subject_count. Tech -> topic, technology, concepts. Fitness -> workout_type, muscle_group, equipment, difficulty. Dance -> dance_style, setting, music_genre. Art -> medium, style, subject. Editing -> software, technique, effect_type. Kids -> activity_type, age_group, occasion. Other -> free-form."
     }
   },
   "required": ["category", "title", "summary", "search_context", "keywords"]

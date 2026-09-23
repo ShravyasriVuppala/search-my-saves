@@ -6,7 +6,13 @@ from google.genai import types
 
 from config import Settings
 from gemini.client import call_with_retry, get_client
-from gemini.prompt import ANALYSIS_PROMPT, GEMINI_RESPONSE_SCHEMA, PROMPT_VERSION
+from gemini.prompt import (
+    ANALYSIS_PROMPT,
+    GEMINI_RESPONSE_SCHEMA,
+    PROMPT_VERSION,
+    RECATEGORIZE_PROMPT,
+    RECATEGORIZE_RESPONSE_SCHEMA,
+)
 from models import AnalysisResult
 
 
@@ -87,3 +93,49 @@ def analyze_post(
         analysis_input_mode=input_mode,
         frames_analyzed=len(frame_jpegs) if frame_jpegs else None,
     )
+
+
+def recategorize_post(
+    settings: Settings,
+    title: str,
+    summary: str,
+    search_context: str,
+    keywords: list[str],
+) -> dict:
+    """Text-only re-tagging against a changed category taxonomy -- no media,
+    no embedding call. See RECATEGORIZE_PROMPT's docstring in prompt.py for
+    why this is safe to do from the existing text alone. Returns a plain
+    dict {category, subcategory, ai_metadata}, not an AnalysisResult -- the
+    caller (recategorize.py) only ever overwrites those three columns."""
+    client = get_client(settings)
+
+    prompt = RECATEGORIZE_PROMPT.format(
+        title=title,
+        summary=summary,
+        search_context=search_context,
+        keywords=", ".join(keywords),
+    )
+
+    response = call_with_retry(
+        client.models.generate_content,
+        model=settings.gemini_analysis_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RECATEGORIZE_RESPONSE_SCHEMA,
+            temperature=0.2,
+        ),
+    )
+
+    if response.text is None:
+        finish_reason = None
+        if response.candidates:
+            finish_reason = response.candidates[0].finish_reason
+        raise RuntimeError(f"Gemini returned no content (finish_reason={finish_reason})")
+
+    raw = json.loads(response.text)
+    return {
+        "category": raw["category"],
+        "subcategory": raw.get("subcategory") or None,
+        "ai_metadata": _parse_ai_metadata(raw.get("ai_metadata")),
+    }

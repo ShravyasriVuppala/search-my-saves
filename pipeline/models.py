@@ -10,14 +10,19 @@ from datetime import datetime
 # Single source of truth so search.py and reprocess.py validate against the
 # same list rather than each keeping their own copy to drift out of sync.
 VALID_CATEGORIES = {
+    "Movies",
+    "Fashion",
+    "Beauty",
+    "Hairstyles",
     "Food",
     "Travel",
-    "Fashion",
-    "Home",
-    "Products",
-    "Learning",
-    "Entertainment",
-    "Ideas",
+    "Photo poses",
+    "Tech",
+    "Fitness",
+    "Dance",
+    "Art",
+    "Editing",
+    "Kids",
     "Other",
 }
 

@@ -27,7 +27,6 @@ _TRANSIENT_NETWORK_ERRORS = (httpx.TimeoutException, httpx.ConnectError)
 
 STUCK_PROCESSING_MINUTES = 30
 VIDEO_DOWNLOAD_TIMEOUT_S = 120
-CLAIM_BATCH_SIZE = 10
 
 
 def reclaim_stuck_posts(client) -> int:
@@ -42,23 +41,30 @@ def reclaim_stuck_posts(client) -> int:
     return len(result.data or [])
 
 
-def claim_batch(client, settings: Settings, limit: int) -> list[dict]:
+def claim_one(client, settings: Settings) -> dict | None:
+    """Claims a single post, not a batch -- so a post is never marked
+    PROCESSING without being processed next in the same loop iteration.
+    Slightly more Supabase round-trips than batch-claiming, negligible next
+    to the WORKER_RPM gap between Gemini calls, and it removes the "claimed
+    but never attempted" state entirely instead of needing to recover from
+    it (previously handled by releasing unprocessed batch members on a
+    quota stop, and before that by the 30-minute stuck-PROCESSING reclaim)."""
     posts = (
         client.table("saved_posts")
         .select("*")
         .eq("processing_status", "PENDING")
         .lt("retry_count", settings.worker_max_retries)
         .order("saved_at", desc=True)
-        .limit(limit)
+        .limit(1)
         .execute()
         .data
         or []
     )
     if not posts:
-        return []
-    ids = [p["id"] for p in posts]
-    client.table("saved_posts").update({"processing_status": "PROCESSING"}).in_("id", ids).execute()
-    return posts
+        return None
+    post = posts[0]
+    client.table("saved_posts").update({"processing_status": "PROCESSING"}).eq("id", post["id"]).execute()
+    return post
 
 
 def resolve_media(client, settings: Settings, post: dict) -> tuple[list[bytes] | None, bytes | None]:
@@ -201,42 +207,37 @@ def run(daily_cap: int | None = None) -> None:
     stopped_early = False
 
     while processed < cap and not stopped_early:
-        batch = claim_batch(client, settings, limit=min(CLAIM_BATCH_SIZE, cap - processed))
-        if not batch:
+        post = claim_one(client, settings)
+        if post is None:
             break
 
-        for post in batch:
-            if processed >= cap:
-                break
-            start = time.monotonic()
+        start = time.monotonic()
 
-            try:
-                process_post(client, settings, post)
-                completed += 1
-            except Exception as exc:  # noqa: BLE001 -- one bad post must not kill the run
-                quota_error = _is_quota_error(exc)
-                mark_failed(client, post, str(exc), count_against_retry=not quota_error)
-                failed += 1
-                print(
-                    f"{'quota-limited' if quota_error else 'failed'}: "
-                    f"{post['instagram_post_id']}: {exc}",
-                    file=sys.stderr,
-                )
-                if quota_error:
-                    # 429/5xx surviving call_with_retry's own backoff means
-                    # Gemini is globally limited right now, not just for this
-                    # post -- every remaining post would fail the same way.
-                    # Stop instead of burning through the rest one by one;
-                    # they're all still PENDING and pick back up next run.
-                    stopped_early = True
+        try:
+            process_post(client, settings, post)
+            completed += 1
+        except Exception as exc:  # noqa: BLE001 -- one bad post must not kill the run
+            quota_error = _is_quota_error(exc)
+            mark_failed(client, post, str(exc), count_against_retry=not quota_error)
+            failed += 1
+            print(
+                f"{'quota-limited' if quota_error else 'failed'}: "
+                f"{post['instagram_post_id']}: {exc}",
+                file=sys.stderr,
+            )
+            if quota_error:
+                # 429/5xx surviving call_with_retry's own backoff means
+                # Gemini is globally limited right now, not just for this
+                # post -- every remaining post would fail the same way.
+                # Stop instead of burning through the rest one by one;
+                # nothing beyond this post has been claimed yet, so
+                # everything else is still untouched PENDING.
+                stopped_early = True
 
-            processed += 1
-            elapsed_s = time.monotonic() - start
-            if elapsed_s < min_interval_s:
-                time.sleep(min_interval_s - elapsed_s)
-
-            if stopped_early:
-                break
+        processed += 1
+        elapsed_s = time.monotonic() - start
+        if elapsed_s < min_interval_s:
+            time.sleep(min_interval_s - elapsed_s)
 
     if stopped_early:
         print(

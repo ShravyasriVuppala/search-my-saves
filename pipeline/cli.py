@@ -9,6 +9,7 @@ Run from pipeline/, with the venv active:
     python cli.py search "<query>" [-n 10] [--category Food]
     python cli.py eval
     python cli.py reprocess --failed | --category X | --stale-prompt v1 | --post-id ABC123
+    python cli.py recategorize
 
 Each subcommand supports --help for its own options.
 """
@@ -21,6 +22,7 @@ import apify_client
 import export_parser
 import ingest as ingest_module
 import media
+import recategorize as recategorize_module
 import reprocess as reprocess_module
 import search as search_module
 import worker
@@ -66,6 +68,7 @@ COMMANDS = {
     "search": search_module.main,
     "eval": _cmd_eval,
     "reprocess": reprocess_module.main,
+    "recategorize": recategorize_module.main,
 }
 
 
