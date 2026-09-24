@@ -1,0 +1,5 @@
+[
+  { "query": "that quick mango dessert with yogurt", "expect_shortcode": "C1a2b3c4d5e" },
+  { "query": "black satin dress for going out", "expect_shortcode": "C6f7g8h9i0j" },
+  { "query": "hiking spot with a lake reflection", "expect_shortcode": "C1k2l3m4n5o" }
+]

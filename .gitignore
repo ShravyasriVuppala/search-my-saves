@@ -39,6 +39,10 @@ pipeline/frame_*.jpg
 CLAUDE.md
 plan.md
 
+# personal eval set: real queries + the shortcodes of posts actually saved.
+# See eval/queries.example.json for the format — write your own.
+eval/queries.json
+
 # editor / OS
 .idea/
 .vscode/

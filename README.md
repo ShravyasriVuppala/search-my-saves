@@ -71,6 +71,11 @@ unconsciously echo the stored text and inflate the numbers.
 On a set of 38 hand-written, blind queries: **recall@5: 94.74% · recall@10:
 97.37% · MRR: 0.7671**.
 
+The eval set is personal — real queries paired with the shortcodes of posts
+actually saved — so it isn't committed. Copy `eval/queries.example.json` to
+`eval/queries.json` and write your own against your own library, then run
+`python cli.py eval`.
+
 If quality falls short, the fix is applied in a fixed order, cheapest and
 highest-leverage first, and never shipped without a measured before/after
 number: (1) improve the AI prompt that generates `search_context`, (2) tune
