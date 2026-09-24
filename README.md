@@ -68,7 +68,7 @@ Queries are written **from memory, before looking at what the AI generated**
 for those posts — this avoids the common evaluation bug where test queries
 unconsciously echo the stored text and inflate the numbers.
 
-On a set of 38 hand-written, blind queries: **recall@5: 94.74% · recall@10:
+On a set of 50 hand-written, blind queries: **recall@5: 94.74% · recall@10:
 97.37% · MRR: 0.7671**.
 
 The eval set is personal — real queries paired with the shortcodes of posts
