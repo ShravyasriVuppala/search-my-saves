@@ -16,7 +16,7 @@ import httpx
 
 from config import Settings, load_settings
 from db import get_client
-from gemini.analyze import analyze_post
+from gemini.analyze import EmptyResponseError, analyze_post
 from gemini.client import RETRYABLE_STATUS_CODES
 from gemini.embed import embed_document
 from media import download_bytes, extract_video_frames
@@ -151,13 +151,31 @@ def build_embedding_input(result) -> str:
 
 def process_post(client, settings: Settings, post: dict) -> None:
     frames, thumbnail = resolve_media(client, settings, post)
+    caption = post.get("caption") or ""
 
-    result = analyze_post(
-        settings,
-        caption=post.get("caption") or "",
-        frame_jpegs=frames,
-        thumbnail_jpeg=thumbnail,
-    )
+    try:
+        result = analyze_post(
+            settings,
+            caption=caption,
+            frame_jpegs=frames,
+            thumbnail_jpeg=thumbnail,
+        )
+    except EmptyResponseError:
+        # An empty response is usually a safety filter, and the media is the
+        # likelier trigger -- so drop it and try the caption alone rather
+        # than losing the post outright. resolve_media's ladder only falls
+        # back when media can't be *fetched*; this covers media that was
+        # fetched fine but made the analysis itself come back empty.
+        # Degraded but recoverable: analysis_input_mode records "caption",
+        # so these rows stay identifiable for a later reprocess.
+        if frames is None and thumbnail is None:
+            raise  # already caption-only, nothing left to drop
+        print(
+            f"empty response with media for {post['instagram_post_id']} -- "
+            "retrying caption-only",
+            file=sys.stderr,
+        )
+        result = analyze_post(settings, caption=caption)
 
     result.source_text = " ".join(filter(None, [post.get("caption"), post.get("creator_username")]))
     result.embedding_input = build_embedding_input(result)
