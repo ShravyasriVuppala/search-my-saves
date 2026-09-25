@@ -4,6 +4,13 @@ import { useState, type FormEvent } from "react";
 
 import type { SearchResult } from "@/lib/types";
 
+function thumbnailUrl(mediaStoragePath: string | null): string | null {
+  if (!mediaStoragePath) return null;
+  // Served through our own route (not a direct Supabase Storage URL) since
+  // the bucket is private (plan.md D4/D5) -- see app/api/thumbnail/[path].
+  return `/api/thumbnail/${encodeURIComponent(mediaStoragePath)}`;
+}
+
 export function SearchBox() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -39,7 +46,7 @@ export function SearchBox() {
 
   return (
     <div>
-      <form onSubmit={runSearch} className="flex gap-2">
+      <form onSubmit={runSearch} className="mx-auto flex max-w-2xl gap-2">
         <input
           type="text"
           value={query}
@@ -58,28 +65,63 @@ export function SearchBox() {
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-      {results && (
-        <ul className="mt-8 space-y-4">
-          {results.length === 0 && <li className="text-zinc-500">No results.</li>}
-          {results.map((r) => (
-            <li key={r.post_id} className="rounded border border-zinc-200 p-4 dark:border-zinc-800">
-              <a href={`/post/${r.post_id}`} className="font-medium hover:underline">
-                {r.title ?? "(untitled)"}
-              </a>
-              <p className="text-sm text-zinc-500">
-                {r.category}
-                {r.subcategory ? ` · ${r.subcategory}` : ""}
-                {r.creator_username ? ` · @${r.creator_username}` : ""}
-              </p>
-              {r.summary && <p className="mt-1 text-sm">{r.summary}</p>}
-              {r.search_context && (
-                <details className="mt-1 text-sm text-zinc-500">
-                  <summary className="cursor-pointer">why this matched</summary>
-                  <p className="mt-1">{r.search_context}</p>
-                </details>
-              )}
-            </li>
-          ))}
+      {results && results.length === 0 && <p className="mt-8 text-zinc-500">No results.</p>}
+
+      {results && results.length > 0 && (
+        <ul className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {results.map((r) => {
+            const thumb = thumbnailUrl(r.media_storage_path);
+            return (
+              <li
+                key={r.post_id}
+                className="flex flex-col overflow-hidden rounded border border-zinc-200 dark:border-zinc-800"
+              >
+                <a href={`/post/${r.post_id}`} className="group">
+                  <div className="aspect-square bg-zinc-100 dark:bg-zinc-900">
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- served
+                      // through our own signed route, not a static/optimizable asset
+                      <img
+                        src={thumb}
+                        alt={r.title ?? "Saved post thumbnail"}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition group-hover:opacity-90"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-zinc-400">
+                        no image
+                      </div>
+                    )}
+                  </div>
+                </a>
+
+                <div className="flex flex-1 flex-col p-2">
+                  <a
+                    href={`/post/${r.post_id}`}
+                    className="text-sm font-medium hover:underline"
+                    title={r.title ?? undefined}
+                  >
+                    {r.title ?? "(untitled)"}
+                  </a>
+                  <p className="truncate text-xs text-zinc-500">
+                    {r.category}
+                    {r.subcategory ? ` · ${r.subcategory}` : ""}
+                    {r.creator_username ? ` · @${r.creator_username}` : ""}
+                  </p>
+                  {r.summary && <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{r.summary}</p>}
+                  {r.search_context && (
+                    // Kept from the list view (plan.md §10): when a result looks
+                    // wrong, this is what explains why it ranked. Collapsed by
+                    // default so it doesn't break the grid's alignment.
+                    <details className="mt-auto pt-2 text-xs text-zinc-500">
+                      <summary className="cursor-pointer">why this matched</summary>
+                      <p className="mt-1">{r.search_context}</p>
+                    </details>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
