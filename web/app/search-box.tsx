@@ -17,6 +17,16 @@ export function SearchBox() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Only meaningful once there's something to clear -- otherwise it's a
+  // permanently dead control sitting next to the primary action.
+  const canClear = query.trim().length > 0 || results !== null;
+
+  function clearSearch() {
+    setQuery("");
+    setResults(null);
+    setError(null);
+  }
+
   async function runSearch(e: FormEvent) {
     e.preventDefault();
     const trimmed = query.trim();
@@ -61,6 +71,17 @@ export function SearchBox() {
         >
           {loading ? "..." : "Search"}
         </button>
+        {canClear && (
+          // type="button" so it doesn't submit the form and fire a search.
+          <button
+            type="button"
+            onClick={clearSearch}
+            disabled={loading}
+            className="rounded border border-zinc-300 px-4 py-3 text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          >
+            Clear
+          </button>
+        )}
       </form>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
@@ -79,8 +100,9 @@ export function SearchBox() {
                 <a href={`/post/${r.post_id}`} className="group">
                   <div className="aspect-square bg-zinc-100 dark:bg-zinc-900">
                     {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- served
-                      // through our own signed route, not a static/optimizable asset
+                      // Served through our own signed route, so it isn't a
+                      // static/optimizable asset next/image could handle.
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={thumb}
                         alt={r.title ?? "Saved post thumbnail"}
