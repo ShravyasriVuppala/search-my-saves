@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import type { SearchResult } from "@/lib/types";
 
@@ -17,14 +17,22 @@ export function SearchBox() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Each search is tagged so a slow earlier response can't overwrite a
+  // newer one. Every search costs a Gemini embedding call, so responses
+  // take long enough that searching twice in quick succession really can
+  // resolve out of order and leave the wrong results on screen.
+  const latestRequest = useRef(0);
+
   // Only meaningful once there's something to clear -- otherwise it's a
   // permanently dead control sitting next to the primary action.
   const canClear = query.trim().length > 0 || results !== null;
 
   function clearSearch() {
+    latestRequest.current += 1; // discard anything still in flight
     setQuery("");
     setResults(null);
     setError(null);
+    setLoading(false);
   }
 
   async function runSearch(e: FormEvent) {
@@ -32,6 +40,7 @@ export function SearchBox() {
     const trimmed = query.trim();
     if (!trimmed) return;
 
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError(null);
     try {
@@ -45,12 +54,14 @@ export function SearchBox() {
         throw new Error(body?.error ?? `Search failed (${res.status})`);
       }
       const data = (await res.json()) as { results: SearchResult[] };
+      if (requestId !== latestRequest.current) return;
       setResults(data.results);
     } catch (err) {
+      if (requestId !== latestRequest.current) return;
       setError(err instanceof Error ? err.message : "Search failed.");
       setResults(null);
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   }
 
@@ -97,7 +108,12 @@ export function SearchBox() {
                 key={r.post_id}
                 className="flex flex-col overflow-hidden rounded border border-zinc-200 dark:border-zinc-800"
               >
-                <a href={`/post/${r.post_id}`} className="group">
+                {/* One link for the whole card rather than separate ones on
+                    the image and title: same destination, so two would mean
+                    two tab stops and two identical screen-reader
+                    announcements. The disclosure below stays outside it,
+                    since interactive content can't nest inside an anchor. */}
+                <a href={`/post/${r.post_id}`} className="group flex flex-1 flex-col">
                   <div className="aspect-square bg-zinc-100 dark:bg-zinc-900">
                     {thumb ? (
                       // Served through our own signed route, so it isn't a
@@ -115,27 +131,35 @@ export function SearchBox() {
                       </div>
                     )}
                   </div>
+
+                  <div className="flex flex-1 flex-col p-2">
+                    <p
+                      className="text-sm font-medium group-hover:underline"
+                      title={r.title ?? undefined}
+                    >
+                      {r.title ?? "(untitled)"}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {r.category}
+                      {r.subcategory ? ` · ${r.subcategory}` : ""}
+                      {r.creator_username ? ` · @${r.creator_username}` : ""}
+                    </p>
+                    {r.summary && (
+                      // Clamped so one long summary can't stretch every card
+                      // in the row -- CSS grid sizes rows to the tallest item.
+                      <p className="mt-1 line-clamp-3 text-xs text-zinc-600 dark:text-zinc-400">
+                        {r.summary}
+                      </p>
+                    )}
+                  </div>
                 </a>
 
-                <div className="flex flex-1 flex-col p-2">
-                  <a
-                    href={`/post/${r.post_id}`}
-                    className="text-sm font-medium hover:underline"
-                    title={r.title ?? undefined}
-                  >
-                    {r.title ?? "(untitled)"}
-                  </a>
-                  <p className="truncate text-xs text-zinc-500">
-                    {r.category}
-                    {r.subcategory ? ` · ${r.subcategory}` : ""}
-                    {r.creator_username ? ` · @${r.creator_username}` : ""}
-                  </p>
-                  {r.summary && <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{r.summary}</p>}
+                <div className="px-2 pb-2">
                   {r.search_context && (
                     // Kept from the list view (plan.md §10): when a result looks
                     // wrong, this is what explains why it ranked. Collapsed by
                     // default so it doesn't break the grid's alignment.
-                    <details className="mt-auto pt-2 text-xs text-zinc-500">
+                    <details className="text-xs text-zinc-500">
                       <summary className="cursor-pointer">why this matched</summary>
                       <p className="mt-1">{r.search_context}</p>
                     </details>
