@@ -132,8 +132,9 @@ export default async function LibraryPage({
               >
                 <div className="aspect-square bg-zinc-100 dark:bg-zinc-900">
                   {thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- served
-                    // through our own signed route, not a static/optimizable asset
+                    // Served through our own signed route, so it isn't a
+                    // static/optimizable asset next/image could handle.
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={thumb}
                       alt={analysis?.title ?? "Saved post thumbnail"}

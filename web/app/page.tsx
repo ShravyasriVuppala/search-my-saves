@@ -38,8 +38,10 @@ async function getCategoryCounts(): Promise<CategoryCount[]> {
 export default async function DashboardPage() {
   const [stats, categoryCounts] = await Promise.all([getStats(), getCategoryCounts()]);
 
+  // max-w-5xl is wide enough for the results grid; the heading and search
+  // input stay narrow and centred so the page still reads as search-first.
   return (
-    <main className="mx-auto max-w-2xl px-4 py-16">
+    <main className="mx-auto max-w-5xl px-4 py-16">
       <h1 className="mb-2 text-center text-3xl font-semibold">Search your saves</h1>
       <p className="mb-8 text-center text-zinc-500">
         {stats.total} total · {stats.completed} processed · {stats.pending} pending ·{" "}
